@@ -88,22 +88,22 @@ class Transformer:
         else:
             return dists
 
-    @staticmethod
-    def acsf_it_dscribe(cds):
-        """Uses dscribe to calculate ACSFs (inefficiently)"""
-        from dscribe.descriptors import ACSF
-        from ase import Atoms
-        structures = [Atoms(symbols=["H", "H", "H","H"], positions=cd) for cd in cds]
-        acsf = ACSF(
-            species=["H", "H", "H","H"],
-            rcut=6.0,
-            g2_params=[[1, 0]],
-            g4_params=[[1, 1, 1]],
-        )
-        acsf_water = acsf.create(structures)
-        ryan_acsf = acsf_water
-        print('idk')
-        return ryan_acsf
+    # @staticmethod
+    # def acsf_it_dscribe(cds):
+    #     """Uses dscribe to calculate ACSFs (inefficiently)"""
+    #     from dscribe.descriptors import ACSF
+    #     from ase import Atoms
+    #     structures = [Atoms(symbols=["H", "H", "H","H"], positions=cd) for cd in cds]
+    #     acsf = ACSF(
+    #         species=["H", "H", "H","H"],
+    #         rcut=6.0,
+    #         g2_params=[[1, 0]],
+    #         g4_params=[[1, 1, 1]],
+    #     )
+    #     acsf_water = acsf.create(structures)
+    #     ryan_acsf = acsf_water
+    #     print('idk')
+    #     return ryan_acsf
 
     @staticmethod
     def sort_coulomb(c_mat):
@@ -149,9 +149,6 @@ if __name__ == '__main__':
     grd = np.linspace(ohdist - 1.0, ohdist + 1.0, 10000)
     walkers = np.array([nick] * 10000)
     walkers[:, 0, 0] = grd
-    start = time.time()
-    water_acsf_dscr = Transformer.acsf_it_dscribe(walkers)
-    print(f"Takes {time.time()-start}s")
     start = time.time()
     water_acsf_rjd = Transformer.acsf_it(walkers,
                                        rcut=6.0,
