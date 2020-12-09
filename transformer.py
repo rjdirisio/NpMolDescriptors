@@ -18,7 +18,7 @@ class Transformer:
         return fc
 
     @staticmethod
-    def get_g2(num_atoms, nonzero_distz, fcs, eta_2, r_s_2):
+    def get_g2(nonzero_distz, fcs, eta_2, r_s_2):
         expie = np.exp(-1 * eta_2 * (nonzero_distz - r_s_2) ** 2) #.reshape(-1, num_atoms, num_atoms - 1)
         expie -= np.eye(len(expie[0]))
         g_2 = np.sum(expie * fcs, axis=2)
@@ -60,7 +60,7 @@ class Transformer:
         fcs -= np.eye(len(fcs[0]))
         # Get Gs
         g_1 = np.sum(fcs, axis=2)
-        g_2 = Transformer.get_g2(num_atoms, rijs, fcs, eta_2, r_s_2)
+        g_2 = Transformer.get_g2(rijs, fcs, eta_2, r_s_2)
         g_4 = Transformer.get_g4(cds, num_atoms, rijs, fcs, zeta_4, eta_4, lam_4)
         return g_1, g_2, g_4
 
@@ -88,23 +88,6 @@ class Transformer:
         else:
             return dists
 
-    # @staticmethod
-    # def acsf_it_dscribe(cds):
-    #     """Uses dscribe to calculate ACSFs (inefficiently)"""
-    #     from dscribe.descriptors import ACSF
-    #     from ase import Atoms
-    #     structures = [Atoms(symbols=["H", "H", "H","H"], positions=cd) for cd in cds]
-    #     acsf = ACSF(
-    #         species=["H", "H", "H","H"],
-    #         rcut=6.0,
-    #         g2_params=[[1, 0]],
-    #         g4_params=[[1, 1, 1]],
-    #     )
-    #     acsf_water = acsf.create(structures)
-    #     ryan_acsf = acsf_water
-    #     print('idk')
-    #     return ryan_acsf
-
     @staticmethod
     def sort_coulomb(c_mat):
         """Takes in coulomb matrix and sorts it according to the row norm"""
@@ -113,12 +96,11 @@ class Transformer:
         return sorted_c_mat
 
     @staticmethod
-    def coulomb_it(cds, sort_mat=True):
+    def coulomb_it(cds, zs, sort_mat=True):
         """
         Takes in cartesian coordinates, outputs the upper triangle of
         the coulomb matrix.  Option to have it sorted for permutational invariance
         """
-        zs = np.array([6, 1, 1, 1, 1, 1])
         # get 0.5 * z^0.4
         rest = np.ones((len(zs), len(zs)))
         np.fill_diagonal(rest, 0.5 * zs ** 0.4)
@@ -139,16 +121,29 @@ class Transformer:
 
 if __name__ == '__main__':
     from pyvibdmc.simulation_utilities import *
+    import multiprocessing as mp
+    nproc = 20
+    nwalk = 1000000
 
-    nick = np.array([[0.9578400, 0.0000000, 0.0000000],
-                     [-0.2399535, 0.9272970, 0.0000000],
-                     [0.5, -0.10564, 0.0000000],
-                     [0.0000000, 0.0000000, 0.0000000]])
-    nick = Constants.convert(nick, 'angstroms', to_AU=True)
-    ohdist = nick[0, 0]
-    grd = np.linspace(ohdist - 1.0, ohdist + 1.0, 10000)
-    walkers = np.array([nick] * 10000)
-    walkers[:, 0, 0] = grd
+    pool = mp.Pool(nproc)
+    #bad ch5+ geoms
+    walkers = np.random.random((nwalk,6,3))
+
+    print(f"Nprocs: {nproc}")
+    for i in range(10):
+        start = time.time()
+        lst = np.array_split(walkers,nproc)
+        
+        res = pool.starmap(Transformer.acsf_it,zip(lst,
+                                          np.repeat(6.0,len(lst)),
+                                          np.repeat(1.,len(lst)),
+                                          np.repeat(0.,len(lst)),
+                                          np.repeat(1.,len(lst)),
+                                          np.repeat(1.,len(lst)),
+                                          np.repeat(1.,len(lst))))
+        water_acsf_rjd_mp = np.concatenate(res)
+        print(f"Parallel ACSF Takes {time.time()-start}s")
+    
     start = time.time()
     water_acsf_rjd = Transformer.acsf_it(walkers,
                                        rcut=6.0,
@@ -157,4 +152,18 @@ if __name__ == '__main__':
                                        zeta_4=1,
                                        eta_4=1,
                                        lam_4=1)
-    print(f"Takes {time.time()-start}s")
+    print(f"Single core ACSF Takes {time.time()-start}s")
+
+
+    #coulomb timing
+    for _ in range(10):
+        start = time.time()
+        zs = np.array([6,1,1,1,1,1])
+        lst = np.array_split(walkers, nproc)
+        res = pool.starmap(Transformer.coulomb_it, zip(lst, np.tile(zs,(len(lst),1))))
+        water_acsf_rjd_mp = np.concatenate(res)
+        print(f"Parallel Coulomb Takes {time.time() - start}s")
+
+    start = time.time()
+    water_acsf_rjd = Transformer.coulomb_it(walkers,zs)
+    print(f"Single core Coulomb Takes {time.time() - start}s")
